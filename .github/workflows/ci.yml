@@ -35,7 +35,7 @@ jobs:
           python -m pip install -c artifacts/versions.txt -r requirements.txt -r requirements-api.txt httpx
 
       - name: Run full test suite
-        run: python -m pytest -q
+        run: python -m pytest -q tests/
 
       - name: Build Docker image
         run: docker build -t taxi-api:ci .

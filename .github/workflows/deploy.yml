@@ -31,7 +31,7 @@ jobs:
           python -m pip install -c artifacts/versions.txt -r requirements.txt -r requirements-api.txt httpx
 
       - name: Run full test suite
-        run: python -m pytest -q
+        run: python -m pytest -q tests/
 
   publish:
     needs: test
