@@ -1,14 +1,24 @@
 
 name: Deploy
 
+# Automatically deploy after a push or merge to main.
+# Manual execution is also available as a backup.
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
   contents: read
 
+# Prevent two deployments from modifying EC2 simultaneously.
+concurrency:
+  group: bangkok-taxi-production
+  cancel-in-progress: false
+
 jobs:
-  # Step 1: Test the application before publishing anything
+  # Step 1: Test the application
   test:
     name: Test application
     runs-on: ubuntu-24.04
@@ -40,6 +50,7 @@ jobs:
     name: Publish Docker image to GHCR
     needs: test
     runs-on: ubuntu-24.04
+
     if: github.ref == 'refs/heads/main'
 
     permissions:
@@ -65,7 +76,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ github.token }}
 
       - name: Build and push Docker image
         env:
@@ -78,31 +89,42 @@ jobs:
           docker push "${IMAGE}:${GITHUB_SHA}"
           docker push "${IMAGE}:latest"
 
-  # Step 3: Deploy the published image to Amazon Linux EC2
+  # Step 3: Deploy the exact image built in this workflow to EC2
   deploy:
     name: Deploy to AWS EC2
     needs: publish
     runs-on: ubuntu-24.04
+    timeout-minutes: 25
+
     if: github.ref == 'refs/heads/main'
+
+    permissions:
+      contents: read
+      packages: read
 
     steps:
       - name: Deploy container to EC2
         uses: appleboy/ssh-action@v1
+
         env:
           IMAGE: ${{ needs.publish.outputs.image }}
-          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
-          GHCR_READ_TOKEN: ${{ secrets.GHCR_READ_TOKEN }}
+          IMAGE_TAG: ${{ github.sha }}
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_TOKEN: ${{ github.token }}
 
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: IMAGE,GHCR_USERNAME,GHCR_READ_TOKEN
+          timeout: 60s
+          command_timeout: 20m
+          envs: IMAGE,IMAGE_TAG,GHCR_USERNAME,GHCR_TOKEN
 
           script: |
             set -eu
 
-            echo "$GHCR_READ_TOKEN" | docker login ghcr.io \
+            echo "Logging in to GitHub Container Registry..."
+            echo "$GHCR_TOKEN" | docker login ghcr.io \
               --username "$GHCR_USERNAME" \
               --password-stdin
 
@@ -111,18 +133,19 @@ jobs:
             }
             trap cleanup EXIT
 
-            echo "Pulling latest application image..."
-            docker pull "${IMAGE}:latest"
+            echo "Pulling image for commit ${IMAGE_TAG}..."
+            docker pull "${IMAGE}:${IMAGE_TAG}"
 
-            echo "Removing previous application container..."
+            echo "Removing previous application containers..."
+            docker rm -f taxi-api || true
             docker rm -f taxi || true
 
-            echo "Starting new application container..."
+            echo "Starting the new application container..."
             docker run -d \
-              --name taxi \
+              --name taxi-api \
               --restart unless-stopped \
               -p 80:8000 \
-              "${IMAGE}:latest"
+              "${IMAGE}:${IMAGE_TAG}"
 
             echo "Checking application health..."
 
@@ -137,5 +160,5 @@ jobs:
             done
 
             echo "Deployment health check failed."
-            docker logs taxi || true
+            docker logs taxi-api || true
             exit 1
