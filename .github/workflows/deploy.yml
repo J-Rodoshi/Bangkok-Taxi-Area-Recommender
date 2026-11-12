@@ -8,7 +8,9 @@ permissions:
   contents: read
 
 jobs:
+  # Step 1: Test the application before publishing anything
   test:
+    name: Test application
     runs-on: ubuntu-24.04
 
     steps:
@@ -33,7 +35,9 @@ jobs:
       - name: Run full test suite
         run: python -m pytest -q tests/
 
+  # Step 2: Build and publish the Docker image to GHCR
   publish:
+    name: Publish Docker image to GHCR
     needs: test
     runs-on: ubuntu-24.04
     if: github.ref == 'refs/heads/main'
@@ -67,11 +71,16 @@ jobs:
         env:
           IMAGE: ${{ steps.image.outputs.name }}
         run: |
-          docker build -t "${IMAGE}:${GITHUB_SHA}" -t "${IMAGE}:latest" .
+          docker build \
+            -t "${IMAGE}:${GITHUB_SHA}" \
+            -t "${IMAGE}:latest" .
+
           docker push "${IMAGE}:${GITHUB_SHA}"
           docker push "${IMAGE}:latest"
 
+  # Step 3: Deploy the published image to Amazon Linux EC2
   deploy:
+    name: Deploy to AWS EC2
     needs: publish
     runs-on: ubuntu-24.04
     if: github.ref == 'refs/heads/main'
@@ -83,38 +92,50 @@ jobs:
           IMAGE: ${{ needs.publish.outputs.image }}
           GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
           GHCR_READ_TOKEN: ${{ secrets.GHCR_READ_TOKEN }}
+
         with:
           host: ${{ secrets.EC2_HOST }}
-          username: ubuntu
+          username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
           envs: IMAGE,GHCR_USERNAME,GHCR_READ_TOKEN
+
           script: |
             set -eu
 
-            echo "$GHCR_READ_TOKEN" | docker login ghcr.io --username "$GHCR_USERNAME" --password-stdin
+            echo "$GHCR_READ_TOKEN" | docker login ghcr.io \
+              --username "$GHCR_USERNAME" \
+              --password-stdin
 
             cleanup() {
               docker logout ghcr.io >/dev/null 2>&1 || true
             }
             trap cleanup EXIT
 
+            echo "Pulling latest application image..."
             docker pull "${IMAGE}:latest"
 
+            echo "Removing previous application container..."
             docker rm -f taxi || true
 
+            echo "Starting new application container..."
             docker run -d \
               --name taxi \
               --restart unless-stopped \
               -p 80:8000 \
               "${IMAGE}:latest"
 
+            echo "Checking application health..."
+
             for attempt in $(seq 1 20); do
               if curl --fail --silent http://127.0.0.1/health; then
                 echo
+                echo "Deployment successful!"
                 exit 0
               fi
+
               sleep 2
             done
 
+            echo "Deployment health check failed."
             docker logs taxi || true
             exit 1
