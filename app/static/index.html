@@ -3,94 +3,518 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Where should I drive next?</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<meta name="theme-color" content="#14231e">
+<title>DriveAhead — Bangkok Taxi Driver Assistant</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 <style>
-  body { margin: 0; font-family: system-ui, sans-serif; display: flex; flex-direction: column; height: 100vh; }
-  header { padding: 10px 16px; background: #1e2327; color: #fff; }
-  header small { opacity: .7; }
-  main { flex: 1; display: flex; min-height: 0; }
-  #panel { width: 380px; padding: 12px; overflow-y: auto; border-right: 1px solid #ddd; }
-  #map { flex: 1; }
-  select, button { width: 100%; padding: 8px; margin: 6px 0; font-size: 14px; }
-  button { background: #0b6bcb; color: #fff; border: 0; border-radius: 6px; cursor: pointer; }
-  .card { border: 1px solid #ddd; border-radius: 8px; padding: 8px 10px; margin: 8px 0; }
-  .card b { font-size: 15px; }
-  .low { color: #b45309; } .medium { color: #6b7280; } .high { color: #15803d; }
-  #outcome { background: #f3f4f6; }
-  footer { font-size: 11px; padding: 4px 16px; color: #666; border-top: 1px solid #ddd; }
-  @media (max-width: 800px) { main { flex-direction: column; } #panel { width: auto; max-height: 45%; } }
+  :root {
+    --ink: #17231f;
+    --muted: #68766f;
+    --line: #e3e9e5;
+    --paper: #f4f7f4;
+    --card: #ffffff;
+    --green: #16794c;
+    --green-dark: #105c39;
+    --green-soft: #e8f5ed;
+    --blue: #2563eb;
+    --amber: #a15c08;
+    --amber-soft: #fff4df;
+    --red: #b42318;
+    --shadow: 0 12px 34px rgba(21, 39, 30, .08);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; color: var(--ink); background: var(--paper); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  button, input, select { font: inherit; }
+  button { cursor: pointer; }
+  .topbar { min-height: 68px; padding: 12px clamp(16px, 3vw, 34px); background: #14231e; color: white; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+  .brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
+  .brand-mark { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 12px; background: #d9f5e4; color: #115c39; font-size: 21px; }
+  .brand-name { font-weight: 800; letter-spacing: -.03em; font-size: 18px; }
+  .brand-sub { color: #b8c9c0; font-size: 11px; margin-top: 1px; }
+  .top-meta { display: flex; align-items: center; gap: 10px; color: #d5e2db; font-size: 12px; }
+  .status-dot { display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: #f4bd55; vertical-align: middle; }
+  .app-shell { max-width: 1540px; margin: 0 auto; padding: 22px clamp(12px, 2vw, 28px) 26px; }
+  .page-heading { display: flex; justify-content: space-between; align-items: end; gap: 20px; margin: 2px 2px 17px; }
+  .eyebrow { color: var(--green); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .11em; }
+  h1 { margin: 5px 0 4px; font-size: clamp(25px, 3vw, 35px); letter-spacing: -.045em; line-height: 1.1; }
+  .heading-copy { margin: 0; color: var(--muted); font-size: 14px; }
+  .replay-date { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 9px 12px; text-align: right; min-width: 175px; box-shadow: 0 3px 10px rgba(20,35,30,.03); }
+  .replay-date small { display: block; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
+  .replay-date strong { display: block; margin-top: 3px; font-size: 13px; }
+  .modebar { display: flex; gap: 6px; background: #e9efeb; padding: 5px; border-radius: 13px; width: fit-content; margin: 0 0 14px; }
+  .mode-btn { border: 0; border-radius: 9px; background: transparent; color: #53645b; font-weight: 700; font-size: 13px; padding: 10px 15px; }
+  .mode-btn.active { color: var(--ink); background: white; box-shadow: 0 2px 8px rgba(20,35,30,.08); }
+  .layout { display: grid; grid-template-columns: minmax(330px, 410px) minmax(0, 1fr); gap: 16px; align-items: stretch; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); overflow: hidden; }
+  .panel-inner { padding: 20px; }
+  .section-head { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; }
+  .section-number { width: 25px; height: 25px; display: grid; place-items: center; border-radius: 8px; background: var(--green-soft); color: var(--green-dark); font-size: 12px; font-weight: 800; }
+  .section-head h2 { margin: 0; font-size: 14px; letter-spacing: -.01em; }
+  .field-label { display: block; font-size: 12px; font-weight: 750; color: #3d4b44; margin: 11px 0 6px; }
+  .sub-label { color: var(--muted); font-weight: 450; }
+  .field { width: 100%; min-height: 43px; border: 1px solid #dce5df; border-radius: 10px; padding: 10px 11px; color: var(--ink); background: white; outline: none; transition: border .15s, box-shadow .15s; }
+  .field:focus { border-color: #63a884; box-shadow: 0 0 0 3px rgba(22,121,76,.11); }
+  .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+  .button-row { display: flex; gap: 8px; align-items: center; }
+  .btn { border: 0; border-radius: 10px; padding: 11px 13px; font-weight: 750; font-size: 12px; transition: transform .12s, background .12s; }
+  .btn:active { transform: translateY(1px); }
+  .btn-primary { width: 100%; min-height: 49px; color: white; background: var(--green); font-size: 14px; box-shadow: 0 5px 13px rgba(22,121,76,.18); }
+  .btn-primary:hover { background: var(--green-dark); }
+  .btn-soft { background: var(--green-soft); color: var(--green-dark); }
+  .btn-soft:hover { background: #d9efdf; }
+  .btn-plain { background: #f0f3f1; color: #43534a; }
+  .btn-plain:hover { background: #e5ebe7; }
+  .btn:disabled { cursor: wait; opacity: .65; }
+  .hint { color: var(--muted); font-size: 11px; line-height: 1.5; margin: 6px 0 0; }
+  .divider { height: 1px; background: var(--line); margin: 19px 0; }
+  .timer-box { border: 1px solid #dce9df; background: #f8fcf9; border-radius: 13px; padding: 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .timer-value { font-size: 25px; font-weight: 800; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+  .timer-caption { color: var(--muted); font-size: 10px; margin-top: 2px; }
+  .timer-status { color: var(--green); font-size: 10px; font-weight: 750; margin-top: 4px; }
+  .timer-action { flex: 0 0 auto; }
+  .small-action { border: 0; background: transparent; color: var(--muted); text-decoration: underline; font-size: 10px; padding: 6px 0 0; }
+  .primary-action { margin-top: 17px; }
+  .data-note { margin-top: 12px; padding: 10px 11px; border-radius: 10px; background: var(--amber-soft); color: #85510c; font-size: 10px; line-height: 1.5; }
+  .map-panel { min-height: 640px; display: flex; flex-direction: column; }
+  .map-toolbar { min-height: 56px; padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .map-title { font-size: 13px; font-weight: 800; }
+  .map-subtitle { color: var(--muted); font-size: 10px; margin-top: 2px; }
+  .map-legend { display: flex; gap: 12px; flex-wrap: wrap; color: #59665f; font-size: 10px; }
+  .legend-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
+  #map { flex: 1; min-height: 570px; background: #e9efeb; z-index: 1; }
+  .map-help { padding: 9px 14px; color: var(--muted); border-top: 1px solid var(--line); font-size: 10px; }
+  #driverResults, #demoResults { margin-top: 18px; }
+  .results-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 9px; }
+  .results-header h3 { font-size: 14px; margin: 0; }
+  .count-pill { border-radius: 20px; padding: 4px 8px; background: #eef3ef; color: #53645a; font-size: 10px; font-weight: 700; }
+  .result-card { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin: 9px 0; background: white; }
+  .result-card.best { border-color: #8bc8a4; background: #f7fcf8; }
+  .result-top { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+  .result-title { font-weight: 800; font-size: 13px; }
+  .result-rank { background: var(--green-soft); color: var(--green-dark); border-radius: 7px; padding: 4px 6px; font-size: 10px; font-weight: 800; }
+  .result-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin: 10px 0 8px; }
+  .metric { padding: 7px 6px; background: #f4f7f5; border-radius: 8px; }
+  .metric strong { display: block; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .metric span { display: block; margin-top: 2px; color: var(--muted); font-size: 9px; }
+  .result-foot { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .tag { padding: 4px 7px; border-radius: 20px; font-size: 9px; font-weight: 800; background: #eff2f0; color: #526158; }
+  .tag.high { color: #17603c; background: #e5f5eb; }
+  .tag.medium { color: #88560e; background: #fff3dc; }
+  .tag.low { color: #8b4c27; background: #faeee7; }
+  .result-reason { color: var(--muted); font-size: 10px; line-height: 1.4; margin-top: 8px; }
+  .message { padding: 10px 11px; border-radius: 9px; background: #f0f4f1; color: #405047; font-size: 11px; line-height: 1.5; margin-top: 10px; }
+  .message.error { background: #fff0ef; color: var(--red); }
+  .message.success { background: #eaf6ee; color: #17603c; }
+  .outcome { border: 1px solid #d7e5dc; background: #f7fbf8; border-radius: 12px; padding: 12px; margin-top: 12px; }
+  .outcome strong { font-size: 12px; }
+  .outcome p { margin: 6px 0 0; color: #526158; font-size: 11px; line-height: 1.5; }
+  .confidence-note { color: var(--muted); font-size: 10px; line-height: 1.55; margin: 10px 0 0; }
+  .hidden { display: none !important; }
+  .demo-intro { padding: 11px 12px; border-radius: 10px; background: #f2f5f3; color: #5b6961; font-size: 11px; line-height: 1.5; margin-bottom: 14px; }
+  .footer { max-width: 1540px; margin: 0 auto; padding: 0 18px 18px; color: #78857e; font-size: 10px; line-height: 1.5; }
+  .leaflet-control-attribution { font-size: 9px !important; }
+  @media (max-width: 980px) {
+    .layout { grid-template-columns: minmax(300px, 390px) minmax(0, 1fr); }
+    .map-panel { min-height: 590px; }
+    #map { min-height: 520px; }
+  }
+  @media (max-width: 760px) {
+    .topbar { min-height: 60px; }
+    .top-meta { font-size: 10px; }
+    .app-shell { padding: 16px 11px 20px; }
+    .page-heading { align-items: flex-start; flex-direction: column; gap: 10px; }
+    .replay-date { text-align: left; }
+    .layout { grid-template-columns: 1fr; }
+    .panel-inner { padding: 16px; }
+    .map-panel { min-height: 430px; order: 2; }
+    #map { min-height: 410px; }
+    .map-toolbar { align-items: flex-start; flex-direction: column; }
+    .footer { padding: 0 13px 16px; }
+  }
+  @media (max-width: 390px) {
+    .brand-sub { display: none; }
+    .top-meta { max-width: 125px; text-align: right; }
+    .field-grid { gap: 6px; }
+    .button-row .btn { padding: 10px 8px; }
+  }
 </style>
 </head>
 <body>
-<header><b>Where should I drive next?</b> <small>Bangkok taxi area recommender &middot; replay of one historical day, not live traffic</small></header>
-<main>
-  <div id="panel">
-    <label for="moment">Pick an empty taxi at a moment in time</label>
-    <select id="moment"></select>
-    <button id="go">Find me a better area</button>
-    <div id="msg"></div>
-    <div id="results"></div>
-    <div id="outcome" class="card" hidden></div>
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark" aria-hidden="true">🚕</div>
+    <div><div class="brand-name">DriveAhead</div><div class="brand-sub">Bangkok taxi driver assistant</div></div>
   </div>
-  <div id="map"></div>
-</main>
-<footer>Data: iTIC Foundation / Longdo Traffic probe data 2025 (CC BY 4.0). Estimates from historical taxis, not a guarantee of time saved.</footer>
+  <div class="top-meta"><span><i class="status-dot"></i>Historical-data mode</span></div>
+</header>
+
+<div class="app-shell">
+  <div class="page-heading">
+    <div>
+      <div class="eyebrow">Your next trip starts here</div>
+      <h1>Where should you wait for your next passenger?</h1>
+      <p class="heading-copy">Set your position, tell us how long you've been empty, and compare nearby pickup areas.</p>
+    </div>
+    <div class="replay-date"><small>Historical data date</small><strong id="replayDate">Loading…</strong></div>
+  </div>
+
+  <nav class="modebar" aria-label="Application mode">
+    <button class="mode-btn active" id="driverModeBtn" type="button" aria-pressed="true">🚕 Driver mode</button>
+    <button class="mode-btn" id="demoModeBtn" type="button" aria-pressed="false">▶ Historical demo</button>
+  </nav>
+
+  <div class="layout">
+    <section class="panel">
+      <div class="panel-inner" id="driverPanel">
+        <div class="section-head"><span class="section-number">1</span><h2>Your current position</h2></div>
+        <div class="button-row">
+          <button class="btn btn-soft" id="gpsBtn" type="button">◎ Use my GPS location</button>
+          <button class="btn btn-plain" id="mapPickBtn" type="button">⌖ Pick on map</button>
+        </div>
+        <p class="hint">You can use GPS, enter coordinates, or tap directly on the map.</p>
+        <div class="field-grid">
+          <div><label class="field-label" for="latitude">Latitude</label><input class="field" id="latitude" type="number" inputmode="decimal" step="any" value="13.7563" min="-90" max="90"></div>
+          <div><label class="field-label" for="longitude">Longitude</label><input class="field" id="longitude" type="number" inputmode="decimal" step="any" value="100.5018" min="-180" max="180"></div>
+        </div>
+
+        <div class="divider"></div>
+        <div class="section-head"><span class="section-number">2</span><h2>Your taxi <span class="sub-label">(optional)</span></h2></div>
+        <label class="field-label" for="taxiName">Taxi name or ID <span class="sub-label">— only shown in this session</span></label>
+        <input class="field" id="taxiName" type="text" maxlength="40" placeholder="e.g. Taxi 024">
+
+        <div class="divider"></div>
+        <div class="section-head"><span class="section-number">3</span><h2>Time since your last drop-off</h2></div>
+        <div class="timer-box">
+          <div><div class="timer-value" id="timerDisplay">15 min</div><div class="timer-caption">Time since passenger drop-off</div><div class="timer-status" id="timerStatus">Timer not started</div></div>
+          <div class="timer-action"><button class="btn btn-soft" id="dropoffBtn" type="button">＋ I just dropped off</button></div>
+        </div>
+        <label class="field-label" for="minutesEmpty">Or enter empty duration manually <span class="sub-label">(minutes)</span></label>
+        <input class="field" id="minutesEmpty" type="number" min="0" max="600" step="1" value="15">
+        <button class="small-action" id="stopTimerBtn" type="button" hidden>Stop timer and use the entered duration</button>
+
+        <div class="divider"></div>
+        <div class="section-head"><span class="section-number">4</span><h2>When are you making this decision?</h2></div>
+        <label class="field-label" for="decisionTime">Time of day in the historical replay</label>
+        <input class="field" id="decisionTime" type="time" value="14:20">
+        <p class="hint">The model uses the selected time of day on the historical data date shown above. It does not query live taxi movements.</p>
+
+        <div class="primary-action"><button class="btn btn-primary" id="recommendBtn" type="button">Find my next pickup area&nbsp; →</button></div>
+        <div class="data-note"><strong>Historical demonstration:</strong> Recommendations use previously collected Bangkok taxi data, not live GPS feeds or real-time vacant-taxi counts. GPS only supplies your current position when your browser permits it.</div>
+        <div id="driverMessage" class="message hidden" role="status" aria-live="polite"></div>
+        <div id="driverResults" class="hidden"></div>
+        <div class="confidence-note">Pickup probability and confidence are different: pickup probability is the model's estimated chance of a pickup within 15 minutes. Confidence describes how much supporting historical data is available for the recommended area.</div>
+      </div>
+
+      <div class="panel-inner hidden" id="demoPanel">
+        <div class="section-head"><span class="section-number">▶</span><h2>Replay a historical taxi moment</h2></div>
+        <div class="demo-intro">Choose an anonymised historical decision moment. The app will recommend areas using that taxi's recorded location and empty duration, then show what happened next in the dataset.</div>
+        <label class="field-label" for="momentSelect">Historical decision moment</label>
+        <select class="field" id="momentSelect"><option value="">Loading historical moments…</option></select>
+        <p class="hint" id="momentDate">The date is shown once here; each option shows only its time and empty duration.</p>
+        <button class="btn btn-primary primary-action" id="demoGoBtn" type="button">Replay this decision&nbsp; →</button>
+        <div id="demoMessage" class="message hidden" role="status" aria-live="polite"></div>
+        <div id="demoResults" class="hidden"></div>
+        <div id="demoOutcome" class="outcome hidden"><strong>What actually happened next</strong><p id="outcomeText"></p></div>
+        <div class="confidence-note">Vehicle IDs are not available in this anonymised demonstration. Different moments may represent different taxis or the same taxi at different times.</div>
+      </div>
+    </section>
+
+    <section class="panel map-panel">
+      <div class="map-toolbar">
+        <div><div class="map-title">Bangkok recommendation map</div><div class="map-subtitle" id="mapSubtitle">Tap the map to set your current position</div></div>
+        <div class="map-legend"><span><i class="legend-dot" style="background:#16864f"></i>Your position</span><span><i class="legend-dot" style="background:#2563eb"></i>Recommended areas</span></div>
+      </div>
+      <div id="map" role="application" aria-label="Map of Bangkok. Tap to select your current position."></div>
+      <div class="map-help" id="mapHelp">Map click sets your position. Numbered circles show ranked recommendation areas after you run the model.</div>
+    </section>
+  </div>
+</div>
+<footer class="footer">Data source: iTIC Foundation / Longdo Traffic probe data 2025 (CC BY 4.0), as prepared in this project. Historical estimates are not guarantees of a passenger pickup, travel time, or income. Map tiles © OpenStreetMap contributors.</footer>
+
 <script>
-const map = L.map('map').setView([13.75, 100.52], 12);
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 18, attribution: '&copy; OpenStreetMap contributors'}).addTo(map);
-let layer = L.layerGroup().addTo(map), moments = [];
-const $ = id => document.getElementById(id);
+(() => {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const state = { demoDay: '20251105', moments: [], map: null, layers: null, currentMarker: null, recLayers: null, timerStartedAt: null, timerInterval: null, picking: false, mode: 'driver' };
 
-function text(tag, str, cls) { const e = document.createElement(tag); e.textContent = str; if (cls) e.className = cls; return e; }
-
-async function load() {
-  const r = await fetch('/demo/moments?n=40');
-  moments = await r.json();
-  const sel = $('moment');
-  moments.forEach((m, i) => {
-    const o = document.createElement('option');
-    o.value = i; o.textContent = m.time.replace('T', ' ').slice(0, 16) + ' \u2014 empty ' + m.minutes_empty + ' min';
-    sel.appendChild(o);
-  });
-}
-
-$('go').onclick = async () => {
-  const m = moments[$('moment').value];
-  if (!m) return;
-  $('msg').textContent = 'Working...';
-  const r = await fetch('/recommend', {method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({hex: m.hex, time: m.time, minutes_empty: m.minutes_empty})});
-  const d = await r.json();
-  $('msg').textContent = '';
-  if (!r.ok) { $('msg').textContent = d.detail || 'Error'; return; }
-  layer.clearLayers();
-  const res = $('results'); res.replaceChildren();
-  if (!d.recommendations.length) { res.appendChild(text('div', 'Not enough data here.', 'card')); return; }
-  const pts = [];
-  d.recommendations.forEach(x => {
-    L.circle([x.lat, x.lon], {radius: 450, color: '#0b6bcb', fillOpacity: .25}).addTo(layer)
-      .bindTooltip(String(x.rank), {permanent: true, direction: 'center'});
-    pts.push([x.lat, x.lon]);
-    const c = document.createElement('div'); c.className = 'card';
-    c.appendChild(text('b', '#' + x.rank + (x.stay_here ? ' Stay here' : ' Drive ' + x.drive_min + ' min')));
-    c.appendChild(text('div', 'Expected wait ' + x.expected_wait_min + ' min \u00b7 ' + Math.round(x.p_pickup_15min * 100) +
-      '% chance of a pickup within 15 min'));
-    c.appendChild(text('div', 'Total score ' + x.score + ' min'));
-    const conf = text('div', 'Confidence: ' + x.confidence, x.confidence); c.appendChild(conf);
-    c.appendChild(text('div', x.reason));
-    res.appendChild(c);
-  });
-  map.fitBounds(L.latLngBounds(pts).pad(0.5));
-  const o = $('outcome'); o.hidden = false; o.replaceChildren();
-  o.appendChild(text('b', 'What actually happened next'));
-  o.appendChild(text('div', m.pickup_seen
-    ? 'This taxi (waiting in its own area) got a passenger after ' + m.minutes_until_end.toFixed(0) + ' more minutes.'
-    : 'This taxi was still empty ' + m.minutes_until_end.toFixed(0) + ' minutes later, when we stopped watching it.'));
-  o.appendChild(text('div', 'One taxi is only one example; the replay evaluation compares strategies over many.'));
-};
-load();
+  function showMessage(id, message, type = '') {
+    const el = $(id);
+    el.textContent = message;
+    el.className = `message ${type}`.trim();
+    el.classList.remove('hidden');
+  }
+  function hideMessage(id) { $(id).classList.add('hidden'); }
+  function setBusy(buttonId, busy, label) {
+    const b = $(buttonId);
+    if (busy) { b.dataset.original = b.textContent; b.disabled = true; b.textContent = label || 'Working…'; }
+    else { b.disabled = false; if (b.dataset.original) b.textContent = b.dataset.original; }
+  }
+  function normalizeDay(value) {
+    const s = String(value || '20251105').replace(/-/g, '').slice(0, 8);
+    return /^\d{8}$/.test(s) ? s : '20251105';
+  }
+  function prettyDay(day) {
+    const d = normalizeDay(day);
+    const date = new Date(`${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}T12:00:00`);
+    return date.toLocaleDateString(undefined, {year:'numeric', month:'long', day:'numeric'});
+  }
+  function modelTime(time) { return `${state.demoDay.slice(0,4)}-${state.demoDay.slice(4,6)}-${state.demoDay.slice(6,8)}T${time}`; }
+  function formatDuration(seconds) {
+    const s = Math.max(0, Math.floor(seconds));
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+    return h > 0 ? `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}` : `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+  }
+  function currentMinutesEmpty() {
+    if (state.timerStartedAt !== null) return (Date.now() - state.timerStartedAt) / 60000;
+    return Number.parseFloat($('minutesEmpty').value);
+  }
+  function stopTimer() {
+    if (state.timerInterval !== null) window.clearInterval(state.timerInterval);
+    state.timerInterval = null;
+    state.timerStartedAt = null;
+    $('timerStatus').textContent = 'Manual duration';
+    $('stopTimerBtn').hidden = true;
+  }
+  function updateTimer() {
+    if (state.timerStartedAt === null) return;
+    const elapsed = Math.floor((Date.now() - state.timerStartedAt) / 1000);
+    $('timerDisplay').textContent = formatDuration(elapsed);
+    $('minutesEmpty').value = (elapsed / 60).toFixed(1);
+    $('timerStatus').textContent = 'Timer running on this device';
+  }
+  function startDropoffTimer() {
+    if (state.timerInterval !== null) window.clearInterval(state.timerInterval);
+    state.timerStartedAt = Date.now();
+    $('minutesEmpty').value = '0';
+    $('timerDisplay').textContent = '00:00';
+    $('timerStatus').textContent = 'Timer running on this device';
+    $('stopTimerBtn').hidden = false;
+    state.timerInterval = window.setInterval(updateTimer, 1000);
+  }
+  function validCoordinates() {
+    const lat = Number.parseFloat($('latitude').value), lon = Number.parseFloat($('longitude').value);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+      throw new Error('Enter a valid latitude (−90 to 90) and longitude (−180 to 180).');
+    }
+    return {lat, lon};
+  }
+  function validMinutes() {
+    const minutes = currentMinutesEmpty();
+    if (!Number.isFinite(minutes) || minutes < 0 || minutes > 600) throw new Error('Empty duration must be between 0 and 600 minutes.');
+    return Number(minutes.toFixed(2));
+  }
+  function clearMapResults() {
+    if (state.recLayers) state.recLayers.clearLayers();
+    if (state.currentMarker) { state.layers.removeLayer(state.currentMarker); state.currentMarker = null; }
+  }
+  function setCurrentLocation(lat, lon, zoom = 14) {
+    $('latitude').value = Number(lat).toFixed(6);
+    $('longitude').value = Number(lon).toFixed(6);
+    if (state.currentMarker) state.layers.removeLayer(state.currentMarker);
+    state.currentMarker = L.circleMarker([lat, lon], {radius:8, color:'#0f663d', weight:3, fillColor:'#27ae68', fillOpacity:1}).addTo(state.layers).bindPopup('Your current position');
+    state.map.setView([lat, lon], zoom);
+    $('mapSubtitle').textContent = `Selected position: ${Number(lat).toFixed(4)}, ${Number(lon).toFixed(4)}`;
+  }
+  function renderMapRecommendations(recommendations, current = null) {
+    state.recLayers.clearLayers();
+    const bounds = [];
+    if (current) bounds.push([current.lat, current.lon]);
+    recommendations.forEach((item) => {
+      const color = item.rank === 1 ? '#16864f' : '#2563eb';
+      L.circle([item.lat, item.lon], {radius:380, color, weight:2, fillColor:color, fillOpacity:.19}).addTo(state.recLayers)
+        .bindTooltip(String(item.rank), {permanent:true, direction:'center', className:'rank-label'});
+      bounds.push([item.lat, item.lon]);
+    });
+    if (current) setCurrentLocation(current.lat, current.lon, 13);
+    if (bounds.length > 0) state.map.fitBounds(L.latLngBounds(bounds).pad(.25), {maxZoom:15});
+    $('mapSubtitle').textContent = recommendations.length ? `${recommendations.length} recommended area${recommendations.length === 1 ? '' : 's'} ranked by expected total time` : 'No recommendation areas returned';
+  }
+  function safeNumber(value, digits = 1) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n.toFixed(digits) : '—';
+  }
+  function metric(label, value) {
+    const div = document.createElement('div'); div.className = 'metric';
+    const strong = document.createElement('strong'); strong.textContent = value;
+    const span = document.createElement('span'); span.textContent = label;
+    div.append(strong, span); return div;
+  }
+  function firstAvailable(obj, keys) {
+    for (const key of keys) if (obj && obj[key] !== undefined && obj[key] !== null && Number.isFinite(Number(obj[key]))) return Number(obj[key]);
+    return null;
+  }
+  function makeResultCard(item, historical = false) {
+    const card = document.createElement('article'); card.className = `result-card${item.rank === 1 ? ' best' : ''}`;
+    const top = document.createElement('div'); top.className = 'result-top';
+    const title = document.createElement('div'); title.className = 'result-title';
+    title.textContent = item.stay_here ? 'Stay in your current area' : `Area recommendation ${item.rank}`;
+    const rank = document.createElement('span'); rank.className = 'result-rank'; rank.textContent = `#${item.rank}`;
+    top.append(title, rank); card.append(top);
+    const metrics = document.createElement('div'); metrics.className = 'result-metrics';
+    metrics.append(
+      metric('Drive there', item.stay_here ? '0 min' : `${safeNumber(item.drive_min)} min`),
+      metric('Expected wait', `${safeNumber(item.expected_wait_min)} min`),
+      metric('Pickup in 15 min', `${Math.round(Number(item.p_pickup_15min || 0) * 100)}%`)
+    );
+    card.append(metrics);
+    const foot = document.createElement('div'); foot.className = 'result-foot';
+    const conf = document.createElement('span'); conf.className = `tag ${String(item.confidence || 'low').toLowerCase()}`; conf.textContent = `Confidence: ${item.confidence || 'not available'}`;
+    const score = document.createElement('span'); score.className = 'tag'; score.textContent = `Total-time score: ${safeNumber(item.score)} min`;
+    foot.append(conf, score);
+    const vacantHere = firstAvailable(item, ['vacant_taxis_in_hex','vacant_hex_1h','vacant_taxis_here']);
+    const vacantNearby = firstAvailable(item, ['vacant_taxis_nearby','vacant_nbr_1h','vacant_taxis_in_neighbourhood']);
+    if (vacantHere !== null) { const t = document.createElement('span'); t.className = 'tag'; t.textContent = `Vacant in area (historical): ${Math.round(vacantHere)}`; foot.append(t); }
+    if (vacantNearby !== null) { const t = document.createElement('span'); t.className = 'tag'; t.textContent = `Nearby (historical): ${Math.round(vacantNearby)}`; foot.append(t); }
+    card.append(foot);
+    if (item.reason) { const reason = document.createElement('div'); reason.className = 'result-reason'; reason.textContent = item.reason; card.append(reason); }
+    return card;
+  }
+  function renderResults(containerId, data, current = null) {
+    const root = $(containerId); root.replaceChildren(); root.classList.remove('hidden');
+    const head = document.createElement('div'); head.className = 'results-header';
+    const title = document.createElement('h3'); title.textContent = 'Your recommended areas';
+    const count = document.createElement('span'); count.className = 'count-pill'; count.textContent = `${data.n_candidates ?? data.recommendations.length} candidates checked`;
+    head.append(title, count); root.append(head);
+    if (!data.recommendations || data.recommendations.length === 0) {
+      const msg = document.createElement('div'); msg.className = 'message'; msg.textContent = data.message || 'There is not enough historical information near this position and time. Try another nearby position or a different time.'; root.append(msg);
+    } else {
+      data.recommendations.forEach(item => root.append(makeResultCard(item)));
+    }
+    const note = document.createElement('p'); note.className = 'confidence-note';
+    note.textContent = 'Confidence is a data-coverage indicator, not the probability of getting a passenger. Pickup probability is shown separately above. Historical vacant-taxi counts are shown only when the API supplies them.';
+    root.append(note);
+    renderMapRecommendations(data.recommendations || [], current);
+  }
+  async function apiJson(url, options = {}) {
+    const response = await fetch(url, options);
+    let body;
+    try { body = await response.json(); } catch { body = {}; }
+    if (!response.ok) throw new Error(body.detail || body.message || `Request failed (${response.status}).`);
+    return body;
+  }
+  async function runDriverRecommendation() {
+    hideMessage('driverMessage');
+    try {
+      const coords = validCoordinates();
+      const minutes = validMinutes();
+      const time = $('decisionTime').value;
+      if (!/^\d{2}:\d{2}$/.test(time)) throw new Error('Choose a valid time of day.');
+      setBusy('recommendBtn', true, 'Finding nearby areas…');
+      const data = await apiJson('/recommend', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({lat:coords.lat, lon:coords.lon, time:modelTime(time), minutes_empty:minutes, top_k:3})});
+      renderResults('driverResults', data, coords);
+      const who = $('taxiName').value.trim();
+      showMessage('driverMessage', `${who ? `${who}: ` : ''}Recommendation completed using the historical ${prettyDay(state.demoDay)} data.`, 'success');
+    } catch (err) { showMessage('driverMessage', err.message || 'Could not get recommendations.', 'error'); }
+    finally { setBusy('recommendBtn', false); }
+  }
+  function populateMoments() {
+    const select = $('momentSelect'); select.replaceChildren();
+    if (!state.moments.length) {
+      const opt = document.createElement('option'); opt.value = ''; opt.textContent = 'No historical moments are available'; select.append(opt); return;
+    }
+    const date = document.createElement('option'); date.value = ''; date.textContent = 'Choose a historical moment…'; date.disabled = true; date.selected = true; select.append(date);
+    state.moments.forEach((m, index) => {
+      const opt = document.createElement('option'); opt.value = String(index);
+      const time = String(m.time || '').includes('T') ? String(m.time).split('T')[1].slice(0,5) : String(m.time || 'Unknown time');
+      opt.textContent = `${time}  ·  empty ${safeNumber(m.minutes_empty,0)} min`;
+      select.append(opt);
+    });
+    $('momentDate').textContent = `Replay date: ${prettyDay(state.demoDay)}. The date is shown once; each option contains only its time and empty duration.`;
+  }
+  async function runHistoricalDemo() {
+    hideMessage('demoMessage'); $('demoOutcome').classList.add('hidden');
+    const index = Number.parseInt($('momentSelect').value, 10);
+    const moment = state.moments[index];
+    if (!moment) { showMessage('demoMessage', 'Choose a historical decision moment first.', 'error'); return; }
+    setBusy('demoGoBtn', true, 'Replaying decision…');
+    try {
+      const data = await apiJson('/recommend', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({hex:moment.hex, time:moment.time, minutes_empty:Number(moment.minutes_empty), top_k:3})});
+      renderResults('demoResults', data, moment.lat != null && moment.lon != null ? {lat:Number(moment.lat),lon:Number(moment.lon)} : null);
+      const outcome = $('outcomeText');
+      const minutes = Number(moment.minutes_until_end);
+      outcome.textContent = moment.pickup_seen
+        ? `The historical taxi received a passenger after approximately ${Number.isFinite(minutes) ? minutes.toFixed(0) : 'an unknown number of'} more minutes.`
+        : `The taxi was still empty ${Number.isFinite(minutes) ? minutes.toFixed(0) : 'some'} minutes later, when observation ended.`;
+      $('demoOutcome').classList.remove('hidden');
+      showMessage('demoMessage', 'Historical decision replay completed. The outcome below is what the dataset recorded after this moment.', 'success');
+    } catch (err) { showMessage('demoMessage', err.message || 'Could not replay this moment.', 'error'); }
+    finally { setBusy('demoGoBtn', false); }
+  }
+  function setMode(mode) {
+    state.mode = mode;
+    const driver = mode === 'driver';
+    $('driverPanel').classList.toggle('hidden', !driver);
+    $('demoPanel').classList.toggle('hidden', driver);
+    $('driverModeBtn').classList.toggle('active', driver);
+    $('demoModeBtn').classList.toggle('active', !driver);
+    $('driverModeBtn').setAttribute('aria-pressed', String(driver));
+    $('demoModeBtn').setAttribute('aria-pressed', String(!driver));
+    $('mapSubtitle').textContent = driver ? 'Tap the map to set your current position' : 'Recommendations from the selected historical taxi moment';
+    $('mapHelp').textContent = driver ? 'Map click sets your position. Numbered circles show ranked recommendation areas after you run the model.' : 'Numbered circles show the recommended areas for the selected historical moment.';
+    state.picking = false;
+    window.setTimeout(() => state.map.invalidateSize(), 80);
+  }
+  function setupMap() {
+    state.map = L.map('map', {scrollWheelZoom:true}).setView([13.7563,100.5018], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'&copy; OpenStreetMap contributors'}).addTo(state.map);
+    state.layers = L.layerGroup().addTo(state.map);
+    state.recLayers = L.layerGroup().addTo(state.map);
+    state.map.on('click', (event) => {
+      if (state.mode !== 'driver') return;
+      setCurrentLocation(event.latlng.lat, event.latlng.lng);
+      showMessage('driverMessage', 'Position selected from the map. You can now request recommendations.', 'success');
+    });
+    setCurrentLocation(13.7563,100.5018,12);
+  }
+  async function useGps() {
+    hideMessage('driverMessage');
+    if (!navigator.geolocation) { showMessage('driverMessage', 'This browser does not provide GPS access. Enter coordinates manually or tap the map.', 'error'); return; }
+    $('gpsBtn').disabled = true; $('gpsBtn').textContent = 'Getting GPS…';
+    navigator.geolocation.getCurrentPosition((position) => {
+      setCurrentLocation(position.coords.latitude, position.coords.longitude, 15);
+      $('gpsBtn').disabled = false; $('gpsBtn').textContent = '◎ Use my GPS location';
+      showMessage('driverMessage', 'Your browser supplied your current GPS coordinates. Check the pin before requesting recommendations.', 'success');
+    }, (error) => {
+      $('gpsBtn').disabled = false; $('gpsBtn').textContent = '◎ Use my GPS location';
+      let extra = 'Enter coordinates manually or tap the map instead.';
+      if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') extra = 'This deployed site uses HTTP. Browsers generally require HTTPS for GPS access. Enter coordinates manually or tap the map; HTTPS can be configured separately.';
+      const reason = error.code === 1 ? 'Location permission was denied. ' : error.code === 2 ? 'Your location is unavailable. ' : 'GPS request timed out. ';
+      showMessage('driverMessage', reason + extra, 'error');
+    }, {enableHighAccuracy:true, timeout:12000, maximumAge:30000});
+  }
+  async function loadApp() {
+    setupMap();
+    $('driverModeBtn').addEventListener('click', () => setMode('driver'));
+    $('demoModeBtn').addEventListener('click', () => setMode('demo'));
+    $('gpsBtn').addEventListener('click', useGps);
+    $('mapPickBtn').addEventListener('click', () => { state.picking = true; showMessage('driverMessage', 'Tap anywhere on the map to set your current position.', 'success'); state.map.getContainer().scrollIntoView({behavior:'smooth',block:'center'}); });
+    $('dropoffBtn').addEventListener('click', startDropoffTimer);
+    $('stopTimerBtn').addEventListener('click', () => { updateTimer(); stopTimer(); $('timerDisplay').textContent = `${Number.parseFloat($('minutesEmpty').value || 0)} min`; });
+    $('minutesEmpty').addEventListener('input', () => { if (state.timerStartedAt !== null) stopTimer(); $('timerDisplay').textContent = `${Number.parseFloat($('minutesEmpty').value || 0)} min`; });
+    $('recommendBtn').addEventListener('click', runDriverRecommendation);
+    $('demoGoBtn').addEventListener('click', runHistoricalDemo);
+    try {
+      const health = await apiJson('/health');
+      state.demoDay = normalizeDay(health.demo_day || '20251105');
+      $('replayDate').textContent = prettyDay(state.demoDay);
+    } catch (err) {
+      $('replayDate').textContent = prettyDay(state.demoDay);
+      showMessage('driverMessage', `Could not read service status: ${err.message}. Recommendations may not be available.`, 'error');
+    }
+    try {
+      const moments = await apiJson('/demo/moments?n=80&seed=0');
+      state.moments = Array.isArray(moments) ? moments : [];
+      populateMoments();
+    } catch (err) {
+      state.moments = [];
+      populateMoments();
+      showMessage('demoMessage', `Historical moments could not be loaded: ${err.message}`, 'error');
+    }
+    $('decisionTime').value = '14:20';
+  }
+  document.addEventListener('DOMContentLoaded', loadApp);
+})();
 </script>
 </body>
 </html>
